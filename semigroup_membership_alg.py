@@ -197,12 +197,6 @@ class semigroupMembership(groverPhase):
             self.dec2binQR(self.wiresOfGenerators[i], self.generators[i])
         self.dec2binQR(self.wiresOfSought, self.soughtElement)
 
-    def controlledSuperposition(self, targ, ctrl):
-
-        for wire in targ:
-
-            self.circ.ch(ctrl, wire)
-
     def semigroupMembershipAlgorithm(self):
 
         self.setUpWires()
@@ -211,8 +205,7 @@ class semigroupMembership(groverPhase):
         self.circ.h(self.wireQCounting)
         self.circ.barrier()
 
-        # self.induceSuperposition(self.circ, self.wiresOfLambda)
-        self.controlledSuperposition(self.wiresOfLambda, self.wireQCounting)
+        self.induceSuperposition(self.circ, self.wiresOfLambda)
 
         self.circ.barrier()
 
@@ -237,3 +230,4 @@ class semigroupMembership(groverPhase):
 
 test1 = semigroupMembership(3, None, 2, 3)
 test1.semigroupMembershipAlgorithm()
+print(test1.circ)
