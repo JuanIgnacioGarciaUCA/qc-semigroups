@@ -70,10 +70,10 @@ class groverPhase():
         return qCircuit
 
     @assembleSubCirc
-    def isCero(self, qCircuit, control, target):  # Cero -> Zero
+    def isZero(self, qCircuit, LinCtrl, target, *tCtrl):  # Cero -> Zero
 
-        qCircuit.x(control)
-        qCircuit.mct(control, target)
+        qCircuit.x(LinCtrl)
+        qCircuit.mct([*LinCtrl, *tCtrl], target)
 
         return qCircuit
 
@@ -101,16 +101,18 @@ class groverPhase():
                 qCircuit.h(wires[i])
             self.initH = True
 
-    def semigroupMembershipOracle(self, qCircuit, wiresOfGenerators, numberOfGenerators,
-                                  wiresOfLambda, wiresOfLinCom, wiresOfSought,
-                                  threadPhaseKickback):
+    def semigroupMembershipOracle(self, qCircuit, tControl,  wiresOfGenerators,
+                                  numberOfGenerators, wiresOfLambda, wiresOfLinCom,
+                                  wiresOfSought, threadPhaseKickback):
 
         self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
                                wiresOfLambda, wiresOfLinCom)
 
         self.substractSought(qCircuit, wiresOfSought, wiresOfLinCom[-1])
 
-        self.isCero(qCircuit, wiresOfLinCom[-1], threadPhaseKickback)
+# Buscar alguna forma de poder pasar a isZero como controlador los dos sets de hilos sin
+# cambiar la función.
+        self.isZero(qCircuit,  wiresOfLinCom[-1], threadPhaseKickback, tControl)
 
 
 class semigroupMembership(groverPhase):
@@ -212,8 +214,8 @@ class semigroupMembership(groverPhase):
         for i in range(self.nIter):
 
             self.semigroupMembershipOracle(
-                self.circ, self.wiresOfGenerators, self.numberOfGenerators,
-                self.wiresOfLambda,
+                self.circ, self.wireQCounting, self.wiresOfGenerators,
+                self.numberOfGenerators, self.wiresOfLambda,
                 self.wiresOfLinCom[
                     self.numberOfGenerators*i:self.numberOfGenerators*(1+i)],
                 self.wiresOfSought,
