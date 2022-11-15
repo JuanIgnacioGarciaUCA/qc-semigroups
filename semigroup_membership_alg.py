@@ -233,3 +233,11 @@ class semigroupMembership(groverPhase):
 test1 = semigroupMembership(3, None, 2, 3)
 test1.semigroupMembershipAlgorithm()
 print(test1.circ)
+ll = [x for x in range(25)]
+ll.append(28)
+print(ll)
+resgTest2 = QuantumRegister(30, 'test')
+test2 = QuantumCircuit(resgTest2)
+test2.append(test1.circ, [resgTest2[x] for x in ll])
+
+# print(test2)
