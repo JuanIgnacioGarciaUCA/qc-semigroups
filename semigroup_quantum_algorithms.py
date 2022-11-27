@@ -66,7 +66,7 @@ class groverPhase():
         return qCircuit
 
     @assembleSubCirc
-    def isZero(self, qCircuit, LinCtrl, target, *tCtrl):  # Cero -> Zero
+    def isZero(self, qCircuit, LinCtrl, target, *tCtrl):
 
         qCircuit.x(LinCtrl)
         qCircuit.mct([*LinCtrl, *tCtrl], target)
@@ -112,12 +112,13 @@ class groverPhase():
                                wiresOfLambda, wiresOfLinCom, dagger=True)
 
 
-class semigroupMembership(groverPhase):
+class semigroup(groverPhase):
     '''El numero opt. de iter (sol simple) es sqrt(2^n)'''
 
-    def __init__(self, soughtElement, sizeOfLambda=None, *generators):
+    def __init__(self, sizeOfLambda=None, *generators):
         super().__init__()
-        self.soughtElement = soughtElement
+        self.aproximationQBits = 1
+        self.soughtElement = 0
         self.generators = generators
         self.numberOfGenerators = len(generators)
         if sizeOfLambda is None:
@@ -148,7 +149,11 @@ class semigroupMembership(groverPhase):
         # Tienen que coincidir para poder multiplicarlos.
         sizeOfGenerators = self.sizeOfLambda
 
-        self.wireQCounting = QuantumRegister(1, 't')
+        if self.aproximationQBits != 0:
+            self.wiresQCounting = []
+            for i in range(self.aproximationQBits):
+
+                self.wiresQCounting.append(QuantumRegister(1, f't_{i}'))
 
         self.wiresOfGenerators = [QuantumRegister(sizeOfGenerators, f's{i}')
                                   for i in range(self.numberOfGenerators)]
@@ -174,7 +179,7 @@ class semigroupMembership(groverPhase):
         self.threadPhaseKickback = QuantumRegister(1, 'b')
 
         self.circ = QuantumCircuit(
-            self.wireQCounting, *self.wiresOfGenerators, *self.wiresOfLambda,
+            *self.wiresQCounting, *self.wiresOfGenerators, *self.wiresOfLambda,
             *self.wiresOfLinCom, self.wiresOfSought, self.threadPhaseKickback,
             name='Semigroup Membership Algorithm')
 
@@ -189,34 +194,57 @@ class semigroupMembership(groverPhase):
             self.dec2binQR(self.wiresOfGenerators[i], self.generators[i])
         self.dec2binQR(self.wiresOfSought, self.soughtElement)
 
-    def semigroupMembershipAlgorithm(self):
-
+    def quantumCountingInit(self):
+        # Esta parte es común al inicio de todos los algoritmos
         self.setUpWires()
         self.setUpValues()
         self.setUpPhaseKickback()
-        self.circ.h(self.wireQCounting)
+        for i in range(self.aproximationQBits):
+
+            self.circ.h(self.wiresQCounting[i])
         self.circ.barrier()
 
         self.induceSuperposition(self.circ, self.wiresOfLambda)
 
         self.circ.barrier()
 
-        self.semigroupMembershipOracle(
-            self.circ, self.wireQCounting, self.wiresOfGenerators,
-            self.numberOfGenerators, self.wiresOfLambda,
-            self.wiresOfLinCom[:self.numberOfGenerators],
-            self.wiresOfSought,
-            self.threadPhaseKickback)
+    def quantumCountingParam(self):
+        # definimos el elemento que vamos a buscar
+        try:
+            self.soughtElement = int(input('Introduce elemento a comprobar: '))
+            self.aproximationQBits = int(input('Bits de aproximación: '))
+            if self.aproximationQBits <= 0:
+                raise ValueError
+        except ValueError:
+            raise ValueError
 
-        self.circ.barrier()  # Si no pones las barreras las cajas se mezclan
+    def semigroupMembershipAlgorithm(self):
 
-        self.difussor(self.circ, *self.wiresOfLambda)
+        try:
+            self.quantumCountingParam()
+            self.quantumCountingInit()
+            for i in range(self.aproximationQBits):
+                for j in range(i+1):
+                    self.circ.barrier()
+                    self.semigroupMembershipOracle(
+                        self.circ, self.wiresQCounting[i], self.wiresOfGenerators,
+                        self.numberOfGenerators, self.wiresOfLambda,
+                        self.wiresOfLinCom[:self.numberOfGenerators],
+                        self.wiresOfSought,
+                        self.threadPhaseKickback)
 
-        self.circ.barrier()
+                    self.circ.barrier()  # Si no pones las barreras las cajas se mezclan
 
-        self.circ.h(self.wireQCounting)  # QFT == H para qubits = 1
+                    self.difussor(self.circ, *self.wiresOfLambda)
 
+                    self.circ.barrier()
 
-test1 = semigroupMembership(12, None, 7, 3)
+            if self.aproximationQBits != 0:
+                pass
+              #  self.circ.h(self.wiresQCounting)  # QFT == H para qubits = 1
+        except ValueError:
+            print('Algo salió mal.')
+
+test1 = semigroup(None, 7, 3)
 test1.semigroupMembershipAlgorithm()
 print(test1.circ)
