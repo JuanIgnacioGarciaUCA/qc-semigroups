@@ -54,14 +54,21 @@ class groverPhase():
                           wiresOfLinear):
         '''operador de combinación lineal'''
 
-        for i in range(len(wiresOfGen)):
-            self.product(qCircuit, wiresOfGen[i], wiresOfLambda[i], wiresOfLinear[i])
+        dummy = QuantumCircuit(*wiresOfGen, *wiresOfLambda, *wiresOfLinear,
+                               name='LinComb')
+
+        num = len(wiresOfGen[0])
+        for i in range(numberOfGen):
+
+            QArithmetic.mult(dummy, wiresOfGen[i], wiresOfLambda[i],
+                             wiresOfLinear[i][:2*num], num)
 
         for i in range(numberOfGen-1):
 
-            self.addition(qCircuit, wiresOfLinear[i], wiresOfLinear[i+1])
+            num = len(wiresOfLinear[i])
+            QArithmetic.add(dummy, wiresOfLinear[i], wiresOfLinear[i+1], num)
 
-        return qCircuit
+        return dummy
 
     @assembleSubCirc
     def substractSought(self, qCircuit, wiresOfSought, wiresOfLinearCom):
@@ -105,8 +112,17 @@ class groverPhase():
                                   numberOfGenerators, wiresOfLambda, wiresOfLinCom,
                                   wiresOfSought, threadPhaseKickback):
 
-        self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
+        linCombC = self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
                                wiresOfLambda, wiresOfLinCom)
+
+        auxList = [x for x in wiresOfGenerators]
+        auxList.extend([x for x in wiresOfLambda])
+        auxList.extend([x for x in wiresOfLinCom])
+
+        auxList2 = []
+        for i in range(len(auxList)):
+            auxList2.extend(auxList[i])
+        qCircuit.append(linCombC, auxList2)
 
         self.substractSought(qCircuit, wiresOfSought, wiresOfLinCom[-1])
 
@@ -233,11 +249,3 @@ class semigroupMembership(groverPhase):
 test1 = semigroupMembership(3, None, 2, 3)
 test1.semigroupMembershipAlgorithm()
 print(test1.circ)
-ll = [x for x in range(25)]
-ll.append(28)
-print(ll)
-resgTest2 = QuantumRegister(30, 'test')
-test2 = QuantumCircuit(resgTest2)
-test2.append(test1.circ, [resgTest2[x] for x in ll])
-
-# print(test2)
