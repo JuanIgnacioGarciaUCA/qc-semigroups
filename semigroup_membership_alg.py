@@ -5,57 +5,46 @@ from qiskit import QuantumRegister, QuantumCircuit
 
 class groverPhase():
 
-    '''Compactar en cajas la combinación lineal???'''
-
     def __init__(self, initH=False):
         self.initH = initH  # Ensamblado con el H inicial?
 
     def assembleSubCirc(func):
 
-        def inner(self, qCircuit, *args):
+        def inner(self, qCircuit, *args, **kwargs):
             registerClass = type(QuantumRegister(1, 'dummy'))
             dummyCircuitSize = 0
             wireList = []
             wires = []
-
             for var in args:
-                if type(var) == registerClass:
+                if type(var) == type(list()):
+                    for subVar in var:
+                        wires.append(subVar)
+                elif type(var) == registerClass:
                     wires.append(var)
 
             for wire in wires:
                 dummyCircuitSize += len(wire)
                 wireList += list(wire)
-
             dummyCircuit = QuantumCircuit(*wires, name=f'{func.__name__}')
+            if 'dagger' in kwargs.keys():
+                dagger = kwargs['dagger']
+            else:
+                dagger = False
 
-            qCircuit.append(func(self, dummyCircuit, *args), wireList)
+            if dagger:
+                qCircuit.append(func(self, dummyCircuit, *args).inverse(), wireList)
+            else:
+                qCircuit.append(func(self, dummyCircuit, *args), wireList)
 
         return inner
 
     @assembleSubCirc
-    def addition(self, qCircuit, wiresA, wiresB):
-        '''operador de suma'''
-        numWires = len(wiresA)
-
-        QArithmetic.add(qCircuit, wiresA, wiresB, numWires)
-
-        return qCircuit
-
-    @assembleSubCirc
-    def product(self, qCircuit, threadOfGen, threadOfLambda, threadOfLinear):
-
-        num = len(threadOfGen)
-        QArithmetic.mult(qCircuit, threadOfGen, threadOfLambda, threadOfLinear[:2*num],
-                         num)
-
-        return qCircuit
-
     def linearCombination(self, qCircuit, wiresOfGen, numberOfGen, wiresOfLambda,
-                          wiresOfLinear):
+                          wiresOfLinear, dagger=False):
         '''operador de combinación lineal'''
 
         dummy = QuantumCircuit(*wiresOfGen, *wiresOfLambda, *wiresOfLinear,
-                               name='LinComb')
+                               name='linearCombination')
 
         num = len(wiresOfGen[0])
         for i in range(numberOfGen):
@@ -71,9 +60,9 @@ class groverPhase():
         return dummy
 
     @assembleSubCirc
-    def substractSought(self, qCircuit, wiresOfSought, wiresOfLinearCom):
-        QArithmetic.sub(qCircuit, wiresOfSought, wiresOfLinearCom, len(wiresOfSought)-1)
+    def substractSought(self, qCircuit, wiresOfSought, wiresOfLinearCom, dagger=False):
 
+        QArithmetic.sub(qCircuit, wiresOfSought, wiresOfLinearCom, len(wiresOfSought)-1)
         return qCircuit
 
     @assembleSubCirc
@@ -112,27 +101,18 @@ class groverPhase():
                                   numberOfGenerators, wiresOfLambda, wiresOfLinCom,
                                   wiresOfSought, threadPhaseKickback):
 
-        linCombC = self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
+        self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
                                wiresOfLambda, wiresOfLinCom)
-
-        auxList = [x for x in wiresOfGenerators]
-        auxList.extend([x for x in wiresOfLambda])
-        auxList.extend([x for x in wiresOfLinCom])
-
-        auxList2 = []
-        for i in range(len(auxList)):
-            auxList2.extend(auxList[i])
-        qCircuit.append(linCombC, auxList2)
-
         self.substractSought(qCircuit, wiresOfSought, wiresOfLinCom[-1])
 
-# Buscar alguna forma de poder pasar a isZero como controlador los dos sets de hilos sin
-# cambiar la función.
         self.isZero(qCircuit,  wiresOfLinCom[-1], threadPhaseKickback, tControl)
+
+        self.substractSought(qCircuit, wiresOfSought, wiresOfLinCom[-1], dagger=True)
+        self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
+                               wiresOfLambda, wiresOfLinCom, dagger=True)
 
 
 class semigroupMembership(groverPhase):
-
     '''El numero opt. de iter (sol simple) es sqrt(2^n)'''
 
     def __init__(self, soughtElement, sizeOfLambda=None, *generators):
@@ -144,7 +124,6 @@ class semigroupMembership(groverPhase):
             self.sizeOfLambda = max([math.ceil(math.log2(gen)) for gen in generators])
         else:
             self.sizeOfLambda = sizeOfLambda
-        self.nIter = 1  # We cannot calculate ir properly
 
         '''Numero de iteraciones del algoritmod e grover'''
         self.numbIter = math.floor(math.sqrt(self.numberOfGenerators*self.sizeOfLambda))
@@ -182,16 +161,14 @@ class semigroupMembership(groverPhase):
 
         self.wiresOfLinCom = []
 
-        for i in range(self.nIter):
+        for j in range(self.numberOfGenerators-1):
 
-            for j in range(self.numberOfGenerators-1):
+            self.wiresOfLinCom.append(QuantumRegister(self.sizeOfLambda*2 + j,
+                                                      f'linearCom{j}'))
 
-                self.wiresOfLinCom.append(QuantumRegister(self.sizeOfLambda*2 + j,
-                                                          f'linearCom{j}_it{i}'))
-
-            self.wiresOfLinCom.append(
-                QuantumRegister(self.sizeOfLambda*2 + self.numberOfGenerators,
-                                f'linearCom{self.numberOfGenerators-1}_it{i}'))
+        self.wiresOfLinCom.append(
+            QuantumRegister(self.sizeOfLambda*2 + self.numberOfGenerators,
+                            f'linearCom{self.numberOfGenerators-1}'))
 
         # Same size to substract
         self.wiresOfSought = QuantumRegister(self.sizeOfLambda*2 +
@@ -227,25 +204,22 @@ class semigroupMembership(groverPhase):
 
         self.circ.barrier()
 
-        for i in range(self.nIter):
+        self.semigroupMembershipOracle(
+            self.circ, self.wireQCounting, self.wiresOfGenerators,
+            self.numberOfGenerators, self.wiresOfLambda,
+            self.wiresOfLinCom[:self.numberOfGenerators],
+            self.wiresOfSought,
+            self.threadPhaseKickback)
 
-            self.semigroupMembershipOracle(
-                self.circ, self.wireQCounting, self.wiresOfGenerators,
-                self.numberOfGenerators, self.wiresOfLambda,
-                self.wiresOfLinCom[
-                    self.numberOfGenerators*i:self.numberOfGenerators*(1+i)],
-                self.wiresOfSought,
-                self.threadPhaseKickback)
+        self.circ.barrier()  # Si no pones las barreras las cajas se mezclan
 
-            self.circ.barrier()  # Si no pones las barreras las cajas se mezclan
+        self.difussor(self.circ, *self.wiresOfLambda)
 
-            self.difussor(self.circ, *self.wiresOfLambda)
-
-            self.circ.barrier()
+        self.circ.barrier()
 
         self.circ.h(self.wireQCounting)  # QFT == H para qubits = 1
 
 
-test1 = semigroupMembership(3, None, 2, 3)
+test1 = semigroupMembership(12, None, 7, 3)
 test1.semigroupMembershipAlgorithm()
 print(test1.circ)
