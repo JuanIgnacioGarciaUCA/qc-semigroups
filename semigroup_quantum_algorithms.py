@@ -9,6 +9,13 @@ class groverPhase():
         self.initH = initH  # Ensamblado con el H inicial?
 
     def assembleSubCirc(func):
+        """assembleSubCirc es un decorador que revisa el número total de hilos que se
+        están utilizando en una operación y crea un circuito único donde se integran
+        todos los hilos bajo un único operador.
+
+        En adición, si la función cuenta con una opción para la inversión (dagger) permite
+        recalcular el circuito inverso.
+        """
 
         def inner(self, qCircuit, *args, **kwargs):
             registerClass = type(QuantumRegister(1, 'dummy'))
@@ -41,17 +48,28 @@ class groverPhase():
     @assembleSubCirc
     def linearCombination(self, qCircuit, wiresOfGen, numberOfGen, wiresOfLambda,
                           wiresOfLinear, dagger=False):
-        '''operador de combinación lineal'''
+        '''operador de combinación lineal.
+        qCircuit: circuito donde se ensambla la operación.
+        wiresOfGen: hilos que corresponden a los genedadores del semigrupo. Agrupados por
+        generador.
+        numberOfGen: número de generadores del semigrupo. Auxiliar para ejecutar sumas.
+        wiresOfLambda: Valores libres para la superposición.
+        wiresOfLinear: Valores para almacenar los resultados de productos y sumas
+        escalonadas.
+        '''
+
 
         dummy = QuantumCircuit(*wiresOfGen, *wiresOfLambda, *wiresOfLinear,
                                name='linearCombination')
 
         num = len(wiresOfGen[0])
+        # Productos
         for i in range(numberOfGen):
 
             QArithmetic.mult(dummy, wiresOfGen[i], wiresOfLambda[i],
                              wiresOfLinear[i][:2*num], num)
-
+        # Sumas escalonadas. numberOfGen = #(wiresOfLinear)(como agrupados, no como hilos
+        # independientes.
         for i in range(numberOfGen-1):
 
             num = len(wiresOfLinear[i])
@@ -61,12 +79,20 @@ class groverPhase():
 
     @assembleSubCirc
     def substractSought(self, qCircuit, wiresOfSought, wiresOfLinearCom, dagger=False):
+        """Calcula la diferencia entre el elemento de comprobación y el resultado
+        de la combinación lineal.
+
+        wiresOfSought: hilos que corresponden con el elemento de comprobación de
+        pertenencia.
+        wiresOfLinearComb: Resultado final de la combinación lineal."""
 
         QArithmetic.sub(qCircuit, wiresOfSought, wiresOfLinearCom, len(wiresOfSought)-1)
         return qCircuit
 
     @assembleSubCirc
     def isZero(self, qCircuit, LinCtrl, target, *tCtrl):
+        """Implementa la operación controlada <<comprobar que el resultado es 0>>.
+        Sirve para lograr el PhaseKickback."""
 
         qCircuit.x(LinCtrl)
         qCircuit.mct([*LinCtrl, *tCtrl], target)
@@ -100,6 +126,8 @@ class groverPhase():
     def semigroupMembershipOracle(self, qCircuit, tControl,  wiresOfGenerators,
                                   numberOfGenerators, wiresOfLambda, wiresOfLinCom,
                                   wiresOfSought, threadPhaseKickback):
+        """Implementa el oráculo para el algoritmo de Grover. El oráculo que implementa
+        está diseñado para reaprovechar los hilos auxiliares."""
 
         self.linearCombination(qCircuit, wiresOfGenerators, numberOfGenerators,
                                wiresOfLambda, wiresOfLinCom)
@@ -113,7 +141,8 @@ class groverPhase():
 
 
 class semigroup(groverPhase):
-    '''El numero opt. de iter (sol simple) es sqrt(2^n)'''
+    '''El numero opt. de iter (sol simple) es sqrt(2^n). Aunque este núnero es para
+    cuando existe una única solución en el conjunto.'''
 
     def __init__(self, sizeOfLambda=None, *generators):
         super().__init__()
@@ -128,7 +157,7 @@ class semigroup(groverPhase):
 
     def dec2binQR(self, qReg, number):  # ****
 
-        '''Toma un valor decimal y un registro, introduce el equiv. binairo en el
+        '''Toma un valor decimal y un registro, introduce el equiv. binario en el
         registro.'''
 
         binExp = bin(number)  # −> 0bxxxxx...
@@ -224,7 +253,7 @@ class semigroup(groverPhase):
             self.quantumCountingParam()
             self.quantumCountingInit()
             for i in range(self.aproximationQBits):
-                for j in range(i+1):
+                for j in range(2**i):
                     self.circ.barrier()
                     self.semigroupMembershipOracle(
                         self.circ, self.wiresQCounting[i], self.wiresOfGenerators,
