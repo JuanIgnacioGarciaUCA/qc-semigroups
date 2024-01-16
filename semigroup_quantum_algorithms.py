@@ -1,6 +1,7 @@
 import QArithmetic
 import math
 from qiskit import QuantumRegister, QuantumCircuit
+from qiskit.circuit.library import QFT
 
 
 class groverPhase():
@@ -57,7 +58,6 @@ class groverPhase():
         wiresOfLinear: Valores para almacenar los resultados de productos y sumas
         escalonadas.
         '''
-
 
         dummy = QuantumCircuit(*wiresOfGen, *wiresOfLambda, *wiresOfLinear,
                                name='linearCombination')
@@ -267,12 +267,17 @@ class semigroup(groverPhase):
                     self.difussor(self.circ, *self.wiresOfLambda)
 
                     self.circ.barrier()
+            # Aquí va la QFT
+            # do_swap hay que ver si lo necesitamos.
+            # qué aproximación deberíamos usar?
 
-            if self.aproximationQBits != 0:
-                pass
-              #  self.circ.h(self.wiresQCounting)  # QFT == H para qubits = 1
+            QFTGate = QFT(num_qubits=self.aproximationQBits, name='QFT_inv',
+                          inverse=True).to_gate()
+            self.circ.append(QFTGate, self.wiresQCounting)
+
         except ValueError:
             print('Algo salió mal.')
+
 
 test1 = semigroup(None, 7, 3)
 test1.semigroupMembershipAlgorithm()
