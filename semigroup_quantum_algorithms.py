@@ -24,7 +24,7 @@ class groverPhase():
             wireList = []
             wires = []
             for var in args:
-                if type(var) == type(list()):
+                if isinstance(var, list):
                     for subVar in var:
                         wires.append(subVar)
                 elif type(var) == registerClass:
@@ -95,7 +95,7 @@ class groverPhase():
         Sirve para lograr el PhaseKickback."""
 
         qCircuit.x(LinCtrl)
-        qCircuit.mct([*LinCtrl, *tCtrl], target)
+        qCircuit.mcx([*LinCtrl, *tCtrl], target)
 
         return qCircuit
 
@@ -107,7 +107,7 @@ class groverPhase():
         qCircuit.x(range(nlw))
 
         qCircuit.h(0)
-        qCircuit.mct(list(range(1, nlw)), 0)
+        qCircuit.mcx(list(range(1, nlw)), 0)
         qCircuit.h(0)
 
         qCircuit.x(range(nlw))
@@ -141,8 +141,22 @@ class groverPhase():
 
 
 class semigroup(groverPhase):
-    '''El numero opt. de iter (sol simple) es sqrt(2^n). Aunque este núnero es para
-    cuando existe una única solución en el conjunto.'''
+    """This class englobe all the functionalities to create a quantum circuit which
+    solve the semigroup membership problem or the Silvestre's denumerant. Due to both
+    algorithms are based on the Grover algorithms, use as father the groverPhase class.
+
+    Attributes:
+        - aproximationQBits: number of qbits use by the quantum counting algorithm
+        aproximate the number of solutions. Default as 1
+        - soughtElement: number to check the semigroup membership. Default as 0
+        - generators: set of semigroup generators. Given as imput.
+        - sizeOfLambda: number of qubits use to represent all the lambda wires. If it's
+        not given, it takes the largest generator as referencem, which is the minimun
+        feasible to perform the multiplication. The larger the value, the larger the
+        generated set is.
+    """
+
+    # NOTE: Creo que la descripcion de atributos deberia ir en el __init__
 
     def __init__(self, sizeOfLambda=None, *generators):
         super().__init__()
@@ -157,16 +171,21 @@ class semigroup(groverPhase):
 
     def dec2binQR(self, qReg, number):  # ****
 
-        '''Toma un valor decimal y un registro, introduce el equiv. binario en el
-        registro.'''
+        '''Given a decimal number, implements it in a quantum register.
+
+        Parameters:
+            - qReg: quantum register where the number is implemented.
+            - number: decimal number.
+            '''
 
         binExp = bin(number)  # −> 0bxxxxx...
 
         if len(qReg) < len(binExp)-2:
-            print(f"error al convertir en binario{len(qReg)} and {len(binExp)-2}")
+            print(f"Error converting to binary binario{len(qReg)} and {len(binExp)-2}")
+
             return
         i = 0
-        # De derecha a izquierda
+
         while binExp[-(i+1)] != 'b':
             if binExp[-(i+1)] == '1':
                 self.circ.x(qReg[i])
@@ -175,7 +194,17 @@ class semigroup(groverPhase):
 
     def setUpWires(self):
 
-        # Tienen que coincidir para poder multiplicarlos.
+        '''Creates the quantum register with the appropiates sizes of wires. According to
+        the following requirements:
+
+            1. To perform the multiplication between a lambda and a generator they must
+            have the same size. The output is storage in a different wire with two times
+            the size of them (wiresOfLinCom).
+
+            2. To perform the addition between two wires, the output must have an extra
+            qubit size than the lesser of them.
+            '''
+
         sizeOfGenerators = self.sizeOfLambda
 
         if self.aproximationQBits != 0:
